@@ -30,6 +30,7 @@
         }
 
         #top_bar {
+	    display: none !important;
             background-color: #6e84a3;
             color: white;
             font: bold 12px Helvetica;
@@ -165,6 +166,7 @@
         // Set parameters that can be changed on an active connection
         rfb.viewOnly = readQueryVariable('view_only', false);
         rfb.scaleViewport = readQueryVariable('scale', false);
+        rfb.showDotCursor = readQueryVariable('cursor', false);
     </script>
 </head>
 
