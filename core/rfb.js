@@ -98,8 +98,10 @@ export default class RFB extends EventTargetMixin {
 
         // We rely on modern APIs which might not be available in an
         // insecure context
-        if (!window.isSecureContext) {
-            Log.Error("noVNC requires a secure context (TLS). Expect crashes!");
+        // Nowe (ignoruje ostrzeżenie):
+        const insecureAllowed = new URLSearchParams(window.location.search).get('insecure');
+        if (!window.isSecureContext && !insecureAllowed) {
+            Log.Warn("noVNC requires a secure context (TLS). Expect crashes!");
         }
 
         super();
