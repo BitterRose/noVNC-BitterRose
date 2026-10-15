@@ -3405,17 +3405,29 @@ RFB.messages = {
 };
 
 // Build a cursor from a text mask: 'X' = black, '.' = white, ' ' = transparent.
-// Each mask character becomes scale x scale pixels; the hotspot is the top-left corner.
+// Each mask character covers scale x scale pixels (scale may be fractional:
+// edge pixels get blended from 4x4 samples); the hotspot is the top-left corner.
 function cursorFromMask(mask, scale) {
-    const w = Math.max(...mask.map(row => row.length)) * scale;
-    const h = mask.length * scale;
+    const SAMPLES = 4;
+    const w = Math.ceil(Math.max(...mask.map(row => row.length)) * scale);
+    const h = Math.ceil(mask.length * scale);
     const rgbaPixels = new Uint8Array(w * h * 4);
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
-            const c = mask[Math.floor(y / scale)][Math.floor(x / scale)];
-            if (c === 'X' || c === '.') {
-                const v = c === 'X' ? 0 : 255;
-                rgbaPixels.set([v, v, v, 255], (y * w + x) * 4);
+            let black = 0, white = 0;
+            for (let sy = 0; sy < SAMPLES; sy++) {
+                for (let sx = 0; sx < SAMPLES; sx++) {
+                    const row = mask[Math.floor((y + (sy + 0.5) / SAMPLES) / scale)] || '';
+                    const c = row[Math.floor((x + (sx + 0.5) / SAMPLES) / scale)];
+                    if (c === 'X') black++;
+                    else if (c === '.') white++;
+                }
+            }
+            const covered = black + white;
+            if (covered) {
+                const v = Math.round(255 * white / covered);
+                const a = Math.round(255 * covered / (SAMPLES * SAMPLES));
+                rgbaPixels.set([v, v, v, a], (y * w + x) * 4);
             }
         }
     }
@@ -3452,5 +3464,5 @@ RFB.cursors = {
         "X     X..X",
         "      X..X",
         "       XX",
-    ], 2),
+    ], 4 / 3),
 };
