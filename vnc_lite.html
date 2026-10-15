@@ -20,7 +20,7 @@
 
         body {
             margin: 0;
-            background-color: dimgrey;
+            background-color: black;
             height: 100%;
             display: flex;
             flex-direction: column;
@@ -54,6 +54,41 @@
             overflow: hidden;
         }
 
+        /* Shown while there is no connection to the VNC server */
+        #offline {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 5vmin;
+            background-color: #141414;
+            color: #e6e6e6;
+            font-family: Helvetica, Arial, sans-serif;
+            font-weight: bold;
+            text-align: center;
+        }
+        #offline.visible {
+            display: flex;
+        }
+        #offline_logo {
+            max-width: 60%;
+            max-height: 50%;
+            object-fit: contain;
+            /* transparent logos stay readable on the dark background */
+            background-color: white;
+            border-radius: 1.5vmin;
+        }
+        #offline_name {
+            font-size: 10vmin;
+        }
+        #offline_text {
+            font-size: 7vmin;
+            color: #ff5a4f;
+        }
+
     </style>
 
     <script type="module" crossorigin="anonymous">
@@ -63,19 +98,42 @@
         let rfb;
         let desktopName;
 
+        // Reconnect delays in seconds; the last one repeats
+        const RETRY_DELAYS = [5, 10, 20, 30];
+        // Give up on a connection attempt that hasn't finished by then
+        // (websockify keeps the WebSocket open while it waits for a dead host)
+        const CONNECT_TIMEOUT = 10000;
+
+        let retryCount = 0;
+        let connectTimer = null;
+
         // When this function is called we have
         // successfully connected to a server
         function connectedToServer(e) {
+            clearTimeout(connectTimer);
+            retryCount = 0;
+            showOffline(false);
             status("Connected to " + desktopName);
         }
 
         // This function is called when we are disconnected
         function disconnectedFromServer(e) {
+            clearTimeout(connectTimer);
             if (e.detail.clean) {
                 status("Disconnected");
             } else {
                 status("Something went wrong, connection is closed");
             }
+            showOffline(true);
+
+            const delay = RETRY_DELAYS[Math.min(retryCount, RETRY_DELAYS.length - 1)];
+            retryCount++;
+            setTimeout(connect, delay * 1000);
+        }
+
+        // Cover the screen with the "no connection" panel
+        function showOffline(visible) {
+            document.getElementById('offline').classList.toggle('visible', visible);
         }
 
         // When this function is called, the server requires
@@ -134,11 +192,25 @@
         const password = readQueryVariable('password');
         const path = readQueryVariable('path', 'websockify');
 
-        // | | |         | | |
-        // | | | Connect | | |
-        // v v v         v v v
-
-        status("Connecting");
+        // Contents of the "no connection" panel
+        const name = readQueryVariable('name');
+        const logo = readQueryVariable('logo');
+        const offlineName = document.getElementById('offline_name');
+        const offlineLogo = document.getElementById('offline_logo');
+        document.getElementById('offline_text').textContent =
+            readQueryVariable('offline_text', 'No connection');
+        offlineName.textContent = name || '';
+        offlineName.hidden = !name || !!logo;
+        if (logo) {
+            // Fall back to the name if the logo can't be loaded
+            offlineLogo.onerror = () => {
+                offlineLogo.hidden = true;
+                offlineName.hidden = !name;
+            };
+            offlineLogo.src = logo;
+            offlineLogo.alt = name || '';
+            offlineLogo.hidden = false;
+        }
 
         // Build the websocket URL used to connect
         let url;
@@ -153,20 +225,38 @@
         }
         url += '/' + path;
 
-        // Creating a new RFB object will start a new connection
-        rfb = new RFB(document.getElementById('screen'), url,
-                      { credentials: { password: password } });
+        // | | |         | | |
+        // | | | Connect | | |
+        // v v v         v v v
 
-        // Add listeners to important events from the RFB module
-        rfb.addEventListener("connect",  connectedToServer);
-        rfb.addEventListener("disconnect", disconnectedFromServer);
-        rfb.addEventListener("credentialsrequired", credentialsAreRequired);
-        rfb.addEventListener("desktopname", updateDesktopName);
+        // Called again after every disconnect
+        function connect() {
+            status("Connecting");
 
-        // Set parameters that can be changed on an active connection
-        rfb.viewOnly = readQueryVariable('view_only', false);
-        rfb.scaleViewport = readQueryVariable('scale', false);
-        rfb.showDotCursor = readQueryVariable('cursor', false);
+            // Creating a new RFB object will start a new connection
+            rfb = new RFB(document.getElementById('screen'), url,
+                          { credentials: { password: password } });
+
+            // Add listeners to important events from the RFB module
+            rfb.addEventListener("connect",  connectedToServer);
+            rfb.addEventListener("disconnect", disconnectedFromServer);
+            rfb.addEventListener("credentialsrequired", credentialsAreRequired);
+            rfb.addEventListener("desktopname", updateDesktopName);
+
+            // Set parameters that can be changed on an active connection
+            rfb.viewOnly = readQueryVariable('view_only', false);
+            rfb.scaleViewport = readQueryVariable('scale', false);
+            rfb.showDotCursor = readQueryVariable('cursor', false);
+
+            // disconnect() ends in a "disconnect" event, which schedules the retry
+            const attempt = rfb;
+            connectTimer = setTimeout(() => {
+                showOffline(true);
+                attempt.disconnect();
+            }, CONNECT_TIMEOUT);
+        }
+
+        connect();
     </script>
 </head>
 
@@ -177,6 +267,11 @@
     </div>
     <div id="screen">
         <!-- This is where the remote screen will appear -->
+    </div>
+    <div id="offline">
+        <img id="offline_logo" hidden>
+        <div id="offline_name"></div>
+        <div id="offline_text"></div>
     </div>
 </body>
 </html>

@@ -3398,6 +3398,24 @@ RFB.messages = {
     }
 };
 
+// Build a cursor from a text mask: 'X' = black, '.' = white, ' ' = transparent.
+// Each mask character becomes scale x scale pixels; the hotspot is the top-left corner.
+function cursorFromMask(mask, scale) {
+    const w = Math.max(...mask.map(row => row.length)) * scale;
+    const h = mask.length * scale;
+    const rgbaPixels = new Uint8Array(w * h * 4);
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const c = mask[Math.floor(y / scale)][Math.floor(x / scale)];
+            if (c === 'X' || c === '.') {
+                const v = c === 'X' ? 0 : 255;
+                rgbaPixels.set([v, v, v, 255], (y * w + x) * 4);
+            }
+        }
+    }
+    return { rgbaPixels, w, h, hotx: 0, hoty: 0 };
+}
+
 RFB.cursors = {
     none: {
         rgbaPixels: new Uint8Array(),
@@ -3405,17 +3423,28 @@ RFB.cursors = {
         hotx: 0, hoty: 0,
     },
 
-    dot: {
-        rgbaPixels: new Uint8Array([
-            // 20 x 20 = 400 pikseli, każdy ma 4 wartości RGBA
-            // Czyli 400 * 4 = 1600 wartości — wszystkie czarne i pełne krycie
-            ...Array(100).fill(0).flatMap(() => [0, 0, 0, 255])
-        ]),
-        w: 10,
-        h: 10,
-        hotx: 5,
-        hoty: 5
-    }
-
-
+    // Shown when the server hides its cursor (touch panels): a white arrow
+    // with a black outline, visible on light and dark screens alike
+    dot: cursorFromMask([
+        "X",
+        "XX",
+        "X.X",
+        "X..X",
+        "X...X",
+        "X....X",
+        "X.....X",
+        "X......X",
+        "X.......X",
+        "X........X",
+        "X.........X",
+        "X..........X",
+        "X......XXXXX",
+        "X...X..X",
+        "X..XX..X",
+        "X.X  X..X",
+        "XX   X..X",
+        "X     X..X",
+        "      X..X",
+        "       XX",
+    ], 2),
 };
