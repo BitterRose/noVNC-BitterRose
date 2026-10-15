@@ -3045,6 +3045,12 @@ export default class RFB extends EventTargetMixin {
             return false;
         }
 
+        // "always": ignore the server's cursor, so every screen shows the
+        // same cursor
+        if (this._showDotCursor === 'always') {
+            return true;
+        }
+
         // The dot should not be shown if the cursor is already visible,
         // i.e. contains at least one not-fully-transparent pixel.
         // So iterate through all alpha bytes in rgba and stop at the
