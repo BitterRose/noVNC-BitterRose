@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="utf-8">
 
     <!--
     noVNC example: lightweight example using minimal UI and features
@@ -54,7 +55,9 @@
             overflow: hidden;
         }
 
-        /* Shown while there is no connection to the VNC server */
+        /* Shown while there is no connection to the VNC server: the logo (or
+           name) on a white card, a status badge and the retry countdown.
+           Sizes follow the viewport, i.e. the tile the page is shown in. */
         #offline {
             position: fixed;
             inset: 0;
@@ -63,30 +66,70 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 5vmin;
+            gap: 4vmin;
             background-color: #141414;
-            color: #e6e6e6;
-            font-family: Helvetica, Arial, sans-serif;
-            font-weight: bold;
+            font-family: "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
             text-align: center;
         }
         #offline.visible {
             display: flex;
         }
-        #offline_logo {
-            max-width: 60%;
-            max-height: 50%;
-            object-fit: contain;
-            /* transparent logos stay readable on the dark background */
+        #offline_card {
+            width: min(54vw, 40vh * 16 / 9);
+            aspect-ratio: 16 / 9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 9%;
+            box-sizing: border-box;
             background-color: white;
-            border-radius: 1.5vmin;
+            border-radius: 2.2vmin;
+            box-shadow: 0 0.6vmin 2.4vmin rgba(0, 0, 0, 0.45);
+        }
+        #offline_card[hidden] {
+            display: none;
+        }
+        #offline_logo {
+            max-width: 100%;
+            max-height: 62%;
+            object-fit: contain;
         }
         #offline_name {
-            font-size: 10vmin;
+            color: #1f2329;
+            font-size: min(7vw, 12vh);
+            font-weight: 700;
         }
-        #offline_text {
-            font-size: 7vmin;
-            color: #ff5a4f;
+        #offline_badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5em;
+            padding: 0.4em 1em;
+            border: 1px solid rgba(229, 72, 77, 0.55);
+            border-radius: 999px;
+            background-color: rgba(229, 72, 77, 0.14);
+            color: #ff8589;
+            font-size: min(4vw, 6.5vh);
+            font-weight: 600;
+        }
+        #offline_badge svg {
+            width: 1.1em;
+            height: 1.1em;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        #offline_retry {
+            margin-top: -2vmin;
+            color: #8a9099;
+            font-size: min(2.6vw, 4.8vh);
+        }
+        /* no room for the countdown on a very low tile */
+        @media (max-height: 200px) {
+            #offline_retry {
+                display: none;
+            }
         }
 
     </style>
@@ -99,13 +142,15 @@
         let desktopName;
 
         // Reconnect delays in seconds; the last one repeats
-        const RETRY_DELAYS = [5, 10, 20, 30];
+        const RETRY_DELAYS = [2, 10, 20, 30];
         // Give up on a connection attempt that hasn't finished by then
         // (websockify keeps the WebSocket open while it waits for a dead host)
         const CONNECT_TIMEOUT = 10000;
 
         let retryCount = 0;
         let connectTimer = null;
+        // When the next connection attempt starts (ms); 0 while one is running
+        let retryAt = 0;
 
         // When this function is called we have
         // successfully connected to a server
@@ -128,12 +173,21 @@
 
             const delay = RETRY_DELAYS[Math.min(retryCount, RETRY_DELAYS.length - 1)];
             retryCount++;
+            retryAt = Date.now() + delay * 1000;
+            updateRetryText();
             setTimeout(connect, delay * 1000);
         }
 
         // Cover the screen with the "no connection" panel
         function showOffline(visible) {
             document.getElementById('offline').classList.toggle('visible', visible);
+        }
+
+        // "Retrying in N s" countdown, or "Connecting…" during an attempt
+        function updateRetryText() {
+            const seconds = Math.max(1, Math.ceil((retryAt - Date.now()) / 1000));
+            document.getElementById('offline_retry').textContent = retryAt ?
+                retryText.replace('{s}', seconds) : connectingText;
         }
 
         // When this function is called, the server requires
@@ -195,12 +249,16 @@
         // Contents of the "no connection" panel
         const name = readQueryVariable('name');
         const logo = readQueryVariable('logo');
+        const retryText = readQueryVariable('retry_text', 'Retrying in {s} s');
+        const connectingText = readQueryVariable('connecting_text', 'Connecting…');
         const offlineName = document.getElementById('offline_name');
         const offlineLogo = document.getElementById('offline_logo');
         document.getElementById('offline_text').textContent =
             readQueryVariable('offline_text', 'No connection');
+        document.getElementById('offline_card').hidden = !name && !logo;
         offlineName.textContent = name || '';
         offlineName.hidden = !name || !!logo;
+        setInterval(updateRetryText, 1000);
         if (logo) {
             // Fall back to the name if the logo can't be loaded
             offlineLogo.onerror = () => {
@@ -232,6 +290,8 @@
         // Called again after every disconnect
         function connect() {
             status("Connecting");
+            retryAt = 0;
+            updateRetryText();
 
             // Creating a new RFB object will start a new connection
             rfb = new RFB(document.getElementById('screen'), url,
@@ -269,9 +329,15 @@
         <!-- This is where the remote screen will appear -->
     </div>
     <div id="offline">
-        <img id="offline_logo" hidden>
-        <div id="offline_name"></div>
-        <div id="offline_text"></div>
+        <div id="offline_card">
+            <img id="offline_logo" hidden>
+            <div id="offline_name"></div>
+        </div>
+        <div id="offline_badge">
+            <svg viewBox="0 0 24 24"><path d="M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M2 8.8a15 15 0 0 1 4.2-2.6M10.7 5.1A15 15 0 0 1 22 8.8M5 12.9a10 10 0 0 1 5.2-2.7M16.8 13.5a10 10 0 0 0-2.1-1.6M12 20h.01"/></svg>
+            <span id="offline_text"></span>
+        </div>
+        <div id="offline_retry"></div>
     </div>
 </body>
 </html>

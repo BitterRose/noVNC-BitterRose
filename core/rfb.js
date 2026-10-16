@@ -40,6 +40,12 @@ import H264Decoder from "./decoders/h264.js";
 
 // How many seconds to wait for a disconnect to finish
 const DISCONNECT_TIMEOUT = 3;
+// A static screen sends nothing, so after this many quiet seconds ask the
+// server for one pixel - it has to answer that
+const ALIVE_PROBE = 1;
+// No data at all for this many seconds: the connection is dead (e.g. the
+// proxy host went down without closing it)
+const STALL_TIMEOUT = 5;
 const DEFAULT_BACKGROUND = 'rgb(40, 40, 40)';
 
 // Minimum wait (ms) between two mouse moves
@@ -929,10 +935,13 @@ export default class RFB extends EventTargetMixin {
                 break;
 
             case 'connected':
+                this._lastReceive = Date.now();
+                this._aliveTimer = setInterval(() => this._checkAlive(), 1000);
                 this.dispatchEvent(new CustomEvent("connect", { detail: {} }));
                 break;
 
             case 'disconnecting':
+                clearInterval(this._aliveTimer);
                 this._disconnect();
 
                 this._disconnTimer = setTimeout(() => {
@@ -980,6 +989,19 @@ export default class RFB extends EventTargetMixin {
         return false;
     }
 
+    // Detect a connection that went silent without closing
+    _checkAlive() {
+        if (this._rfbConnectionState !== 'connected') {
+            return;
+        }
+        const quiet = (Date.now() - this._lastReceive) / 1000;
+        if (quiet >= STALL_TIMEOUT) {
+            this._fail("No data from the server for " + STALL_TIMEOUT + " s");
+        } else if (quiet >= ALIVE_PROBE && !this._flushing) {
+            RFB.messages.fbUpdateRequest(this._sock, false, 0, 0, 1, 1);
+        }
+    }
+
     _setCapability(cap, val) {
         this._capabilities[cap] = val;
         this.dispatchEvent(new CustomEvent("capabilities",
@@ -987,6 +1009,7 @@ export default class RFB extends EventTargetMixin {
     }
 
     _handleMessage() {
+        this._lastReceive = Date.now();
         if (this._sock.rQwait("message", 1)) {
             Log.Warn("handleMessage called on an empty receive queue");
             return;
