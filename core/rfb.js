@@ -310,6 +310,7 @@ export default class RFB extends EventTargetMixin {
         this._showDotCursor = false;
 
         this._qualityLevel = 6;
+        this._lossless = false;
         this._compressionLevel = 2;
     }
 
@@ -395,6 +396,24 @@ export default class RFB extends EventTargetMixin {
         }
 
         this._qualityLevel = qualityLevel;
+
+        if (this._rfbConnectionState === 'connected') {
+            this._sendEncodings();
+        }
+    }
+
+    // true: don't send a JPEG quality level, so a Tight server sends only
+    // lossless (zlib) data - sharpest picture, a bit more data
+    get lossless() {
+        return this._lossless;
+    }
+    set lossless(lossless) {
+        lossless = !!lossless;
+        if (this._lossless === lossless) {
+            return;
+        }
+
+        this._lossless = lossless;
 
         if (this._rfbConnectionState === 'connected') {
             this._sendEncodings();
@@ -2277,7 +2296,9 @@ export default class RFB extends EventTargetMixin {
         encs.push(encodings.encodingRaw);
 
         // Psuedo-encoding settings
-        encs.push(encodings.pseudoEncodingQualityLevel0 + this._qualityLevel);
+        if (!this._lossless) {
+            encs.push(encodings.pseudoEncodingQualityLevel0 + this._qualityLevel);
+        }
         encs.push(encodings.pseudoEncodingCompressLevel0 + this._compressionLevel);
 
         encs.push(encodings.pseudoEncodingDesktopSize);

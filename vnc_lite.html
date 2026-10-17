@@ -307,6 +307,13 @@
             rfb.viewOnly = readQueryVariable('view_only', false);
             rfb.scaleViewport = readQueryVariable('scale', false);
             rfb.showDotCursor = readQueryVariable('cursor', false);
+            // quality: 0-9 (JPEG quality for Tight) or "lossless" (no JPEG at all)
+            const quality = readQueryVariable('quality');
+            if (quality === 'lossless') {
+                rfb.lossless = true;
+            } else if (/^[0-9]$/.test(quality || '')) {
+                rfb.qualityLevel = parseInt(quality);
+            }
 
             // disconnect() ends in a "disconnect" event, which schedules the retry
             const attempt = rfb;
