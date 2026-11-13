@@ -314,6 +314,18 @@
             } else if (/^[0-9]$/.test(quality || '')) {
                 rfb.qualityLevel = parseInt(quality);
             }
+            // tap_snap: a tap closer than this (CSS px) to the previous tap
+            // clicks the previous tap's spot (double tap = double click;
+            // noVNC default 50, 0 = off). tap_snap_ms: only within this many
+            // ms of the previous tap (default 1000)
+            const tapSnap = readQueryVariable('tap_snap');
+            if (/^[0-9]+$/.test(tapSnap || '')) {
+                rfb.doubleTapThreshold = parseInt(tapSnap);
+            }
+            const tapSnapMs = readQueryVariable('tap_snap_ms');
+            if (/^[0-9]+$/.test(tapSnapMs || '')) {
+                rfb.doubleTapTimeout = parseInt(tapSnapMs);
+            }
 
             // disconnect() ends in a "disconnect" event, which schedules the retry
             const attempt = rfb;

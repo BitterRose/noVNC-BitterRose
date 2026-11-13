@@ -58,6 +58,7 @@ const WHEEL_LINE_HEIGHT = 19; // Assumed pixels for one line step
 // Gesture thresholds
 const GESTURE_ZOOMSENS = 75;
 const GESTURE_SCRLSENS = 50;
+// Defaults of doubleTapTimeout (ms) and doubleTapThreshold (CSS px)
 const DOUBLE_TAP_TIMEOUT = 1000;
 const DOUBLE_TAP_THRESHOLD = 50;
 
@@ -312,6 +313,9 @@ export default class RFB extends EventTargetMixin {
         this._qualityLevel = 6;
         this._lossless = false;
         this._compressionLevel = 2;
+
+        this._doubleTapTimeout = DOUBLE_TAP_TIMEOUT;
+        this._doubleTapThreshold = DOUBLE_TAP_THRESHOLD;
     }
 
     // ===== PROPERTIES =====
@@ -418,6 +422,24 @@ export default class RFB extends EventTargetMixin {
         if (this._rfbConnectionState === 'connected') {
             this._sendEncodings();
         }
+    }
+
+    // A tap less than doubleTapThreshold CSS px away from the previous tap
+    // and less than doubleTapTimeout ms after it clicks the previous tap's
+    // spot, so a double tap reaches the server as a double click.
+    // doubleTapThreshold 0 turns this off.
+    get doubleTapTimeout() {
+        return this._doubleTapTimeout;
+    }
+    set doubleTapTimeout(ms) {
+        this._doubleTapTimeout = ms;
+    }
+
+    get doubleTapThreshold() {
+        return this._doubleTapThreshold;
+    }
+    set doubleTapThreshold(px) {
+        this._doubleTapThreshold = px;
     }
 
     get compressionLevel() {
@@ -1339,13 +1361,13 @@ export default class RFB extends EventTargetMixin {
         // hit the same spot, so slightly adjust coordinates
 
         if ((this._gestureLastTapTime !== null) &&
-            ((Date.now() - this._gestureLastTapTime) < DOUBLE_TAP_TIMEOUT) &&
+            ((Date.now() - this._gestureLastTapTime) < this._doubleTapTimeout) &&
             (this._gestureFirstDoubleTapEv.detail.type === ev.detail.type)) {
             let dx = this._gestureFirstDoubleTapEv.detail.clientX - ev.detail.clientX;
             let dy = this._gestureFirstDoubleTapEv.detail.clientY - ev.detail.clientY;
             let distance = Math.hypot(dx, dy);
 
-            if (distance < DOUBLE_TAP_THRESHOLD) {
+            if (distance < this._doubleTapThreshold) {
                 pos = clientToElement(this._gestureFirstDoubleTapEv.detail.clientX,
                     this._gestureFirstDoubleTapEv.detail.clientY,
                     this._canvas);
